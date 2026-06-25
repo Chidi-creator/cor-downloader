@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 
@@ -57,7 +58,14 @@ func (p *Processor) ProcessJob(ctx context.Context, jobID string) error {
 	}
 	defer os.RemoveAll(jobDir)
 
+	var lastProgressUpdate time.Time
 	onProgress := func(downloaded, total int64) {
+		now := time.Now()
+		if !shouldSendProgressUpdate(now, lastProgressUpdate, downloaded, total) {
+			return
+		} 
+		lastProgressUpdate = now
+
 		_ = p.Queries.UpdateProgress(ctx, store.UpdateProgressParams{
 			ID:              id,
 			DownloadedBytes: downloaded,
