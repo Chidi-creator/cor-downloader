@@ -24,10 +24,16 @@ type api struct {
 
 func (a *api) routes() http.Handler {
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /health", a.health)
 	mux.HandleFunc("POST /jobs", a.createJob)
 	mux.HandleFunc("GET /jobs/{id}", a.getJob)
 	mux.HandleFunc("GET /jobs/{id}/file", a.downloadFile)
 	return mux
+}
+
+func (a *api) health(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte("ok"))
 }
 
 type createJobRequest struct {

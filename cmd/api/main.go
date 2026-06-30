@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -23,6 +24,21 @@ func getEnv(key, fallback string) string {
 	return fallback
 }
 
+// newRedisClient supports both local Redis (REDIS_ADDR) and Upstash/TLS
+// Redis (REDIS_URL). REDIS_URL takes priority when set.
+func newRedisClient() (*redis.Client, error) {
+	if url := os.Getenv("REDIS_URL"); url != "" {
+		opts, err := redis.ParseURL(url)
+		if err != nil {
+			return nil, fmt.Errorf("parsing REDIS_URL: %w", err)
+		}
+		return redis.NewClient(opts), nil
+	}
+	return redis.NewClient(&redis.Options{
+		Addr: getEnv("REDIS_ADDR", "localhost:6379"),
+	}), nil
+}
+
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
@@ -37,7 +53,10 @@ func main() {
 	log.Println("postgres ready")
 
 	log.Println("connecting to redis...")
-	redisClient := redis.NewClient(&redis.Options{Addr: getEnv("REDIS_ADDR", "localhost:6379")})
+	redisClient, err := newRedisClient()
+	if err != nil {
+		log.Fatalf("connecting to redis: %v", err)
+	}
 	defer redisClient.Close()
 	q := queue.New(redisClient, getEnv("QUEUE_KEY", "cor:jobs"))
 	log.Println("redis ready")
