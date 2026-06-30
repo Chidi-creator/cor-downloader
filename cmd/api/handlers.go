@@ -2,7 +2,14 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
+	"io"
+	"log"
 	"net/http"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
 
 	"github.com/jackc/pgx/v5/pgtype"
 
@@ -10,7 +17,6 @@ import (
 	"cor-downloader/internal/store"
 )
 
-// api holds the dependencies every handler needs.
 type api struct {
 	queries *store.Queries
 	queue   *queue.Queue
@@ -20,6 +26,7 @@ func (a *api) routes() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /jobs", a.createJob)
 	mux.HandleFunc("GET /jobs/{id}", a.getJob)
+	mux.HandleFunc("GET /jobs/{id}/file", a.downloadFile)
 	return mux
 }
 
@@ -100,4 +107,64 @@ func (a *api) getJob(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(toJobResponse(job))
+}
+
+func (a *api) downloadFile(w http.ResponseWriter, r *http.Request) {
+	idParam := r.PathValue("id")
+
+	var id pgtype.UUID
+	if err := id.Scan(idParam); err != nil {
+		http.Error(w, "invalid job id", http.StatusBadRequest)
+		return
+	}
+
+	job, err := a.queries.GetJob(r.Context(), id)
+	if err != nil {
+		http.Error(w, "job not found", http.StatusNotFound)
+		return
+	}
+
+	if job.Status != "done" {
+		http.Error(w, fmt.Sprintf("job is %s, not done", job.Status), http.StatusConflict)
+		return
+	}
+
+	if !job.ObjectKey.Valid {
+		http.Error(w, "no file available", http.StatusNotFound)
+		return
+	}
+
+	filePath := job.ObjectKey.String
+	jobDir := filepath.Dir(filePath)
+
+	f, err := os.Open(filePath)
+	if err != nil {
+		http.Error(w, "file not found on server", http.StatusNotFound)
+		return
+	}
+
+	// clean up the scratch dir once we're done streaming — success or failure
+	defer func() {
+		f.Close()
+		if err := os.RemoveAll(jobDir); err == nil {
+			log.Printf("job %s: scratch dir cleaned up", idParam)
+		}
+	}()
+
+	filename := filepath.Base(filePath)
+
+	info, err := f.Stat()
+	if err == nil {
+		w.Header().Set("Content-Length", strconv.FormatInt(info.Size(), 10))
+	}
+
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename=%q`, filename))
+
+	log.Printf("job %s: streaming %s to client", idParam, filename)
+	if _, err := io.Copy(w, f); err != nil {
+		if !strings.Contains(err.Error(), "broken pipe") {
+			log.Printf("job %s: stream error: %v", idParam, err)
+		}
+	}
 }

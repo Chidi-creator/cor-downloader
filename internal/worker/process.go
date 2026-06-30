@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"time"
@@ -14,24 +15,18 @@ import (
 	"cor-downloader/internal/store"
 )
 
-// Uploader uploads a local file and returns a key identifying where it
-// ended up. The real implementation (MinIO) lives in internal/storage -
-// this package only depends on the interface, not that concrete type.
-type Uploader interface {
-	Upload(ctx context.Context, jobID, localPath string) (objectKey string, err error)
-}
-
-// Processor does the actual work for one job: resolve, download, upload,
-// and record the outcome in Postgres.
+// Processor does the actual work for one job: resolve, download, and record
+// the outcome in Postgres. The file stays in DownloadDir until the API
+// streams it to the client, which then cleans it up.
 type Processor struct {
 	Queries            *store.Queries
-	Uploader           Uploader
-	DownloadDir        string
+	DownloadDir        string // scratch space; files live here until downloaded
 	CookiesFromBrowser string
 }
 
-// ProcessJob runs one job, identified by jobID, end to end.
 func (p *Processor) ProcessJob(ctx context.Context, jobID string) error {
+	start := time.Now()
+
 	var id pgtype.UUID
 	if err := id.Scan(jobID); err != nil {
 		return fmt.Errorf("parsing job id: %w", err)
@@ -42,29 +37,33 @@ func (p *Processor) ProcessJob(ctx context.Context, jobID string) error {
 		return fmt.Errorf("fetching job: %w", err)
 	}
 
+	log.Printf("job %s: resolving %s", jobID, job.Url)
 	info, err := resolver.Resolve(ctx, job.Url, p.CookiesFromBrowser)
 	if err != nil {
 		p.markFailed(ctx, id, err)
 		return err
 	}
+	log.Printf("job %s: resolved — title=%q format=%s", jobID, info.Title, info.SelectedFormat.Ext)
 
-	// Each job gets its own scratch directory - jobs processed concurrently
-	// must never share a destination path, since the filename is derived
-	// from the post title, not the job ID.
 	jobDir := filepath.Join(p.DownloadDir, jobID)
 	if err := os.MkdirAll(jobDir, 0o755); err != nil {
 		p.markFailed(ctx, id, err)
-		return fmt.Errorf("creating job dir: %w", err)
+		return fmt.Errorf("creating scratch dir: %w", err)
 	}
-	defer os.RemoveAll(jobDir)
 
 	var lastProgressUpdate time.Time
 	onProgress := func(downloaded, total int64) {
 		now := time.Now()
 		if !shouldSendProgressUpdate(now, lastProgressUpdate, downloaded, total) {
 			return
-		} 
+		}
 		lastProgressUpdate = now
+
+		log.Printf("job %s: downloading — %.1f MB / %.1f MB",
+			jobID,
+			float64(downloaded)/1e6,
+			float64(total)/1e6,
+		)
 
 		_ = p.Queries.UpdateProgress(ctx, store.UpdateProgressParams{
 			ID:              id,
@@ -73,22 +72,21 @@ func (p *Processor) ProcessJob(ctx context.Context, jobID string) error {
 		})
 	}
 
+	log.Printf("job %s: starting download", jobID)
 	localPath, err := downloader.Download(ctx, info, jobDir, onProgress)
 	if err != nil {
+		os.RemoveAll(jobDir)
 		p.markFailed(ctx, id, err)
 		return err
 	}
 
-	objectKey, err := p.Uploader.Upload(ctx, jobID, localPath)
-	if err != nil {
-		p.markFailed(ctx, id, err)
-		return err
-	}
+	log.Printf("job %s: download complete in %.1fs — ready to serve", jobID, time.Since(start).Seconds())
 
 	if err := p.Queries.MarkDone(ctx, store.MarkDoneParams{
 		ID:        id,
-		ObjectKey: pgtype.Text{String: objectKey, Valid: true},
+		ObjectKey: pgtype.Text{String: localPath, Valid: true},
 	}); err != nil {
+		os.RemoveAll(jobDir)
 		return fmt.Errorf("marking job done: %w", err)
 	}
 
@@ -96,6 +94,7 @@ func (p *Processor) ProcessJob(ctx context.Context, jobID string) error {
 }
 
 func (p *Processor) markFailed(ctx context.Context, id pgtype.UUID, cause error) {
+	log.Printf("job failed: %v", cause)
 	_ = p.Queries.MarkFailed(ctx, store.MarkFailedParams{
 		ID:           id,
 		ErrorMessage: pgtype.Text{String: cause.Error(), Valid: true},
