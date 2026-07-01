@@ -6,7 +6,7 @@ import "time"
 // Postgres - io.Copy calls onProgress on every chunk (potentially hundreds
 // of times per second), but a database row doesn't need updating that
 // often.
-const progressUpdateInterval = 1 * time.Second
+const progressUpdateInterval = 250 * time.Millisecond
 
 // shouldSendProgressUpdate decides whether enough time has passed since the
 // last update to be worth writing again, or whether this is the final
