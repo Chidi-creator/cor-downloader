@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>cor downloader — Settings</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      background: #f7f9f9;
+      min-height: 100vh;
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      padding: 40px 16px;
+      color: #0f1419;
+    }
+
+    .card {
+      background: #fff;
+      border-radius: 14px;
+      border: 1px solid #eff3f4;
+      padding: 28px 28px 24px;
+      width: 100%;
+      max-width: 420px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+    }
+
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 24px;
+    }
+
+    .logo {
+      width: 34px;
+      height: 34px;
+      background: rgba(29,155,240,0.12);
+      border-radius: 9px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    h1 {
+      font-size: 16px;
+      font-weight: 700;
+      color: #0f1419;
+      letter-spacing: -0.3px;
+    }
+
+    .subtitle {
+      font-size: 12px;
+      color: #536471;
+      margin-top: 1px;
+    }
+
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+      margin-bottom: 18px;
+    }
+
+    label {
+      font-size: 12.5px;
+      font-weight: 600;
+      color: #536471;
+      letter-spacing: 0.3px;
+      text-transform: uppercase;
+    }
+
+    input[type="url"] {
+      width: 100%;
+      padding: 10px 12px;
+      font-size: 13px;
+      font-family: 'SF Mono', 'Fira Code', 'Courier New', monospace;
+      color: #0f1419;
+      background: #f7f9f9;
+      border: 1.5px solid #eff3f4;
+      border-radius: 8px;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+
+    input[type="url"]:focus {
+      border-color: #1d9bf0;
+      background: #fff;
+    }
+
+    .hint {
+      font-size: 11.5px;
+      color: #8b98a5;
+      line-height: 1.5;
+    }
+
+    .actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .btn-save {
+      all: unset;
+      cursor: pointer;
+      padding: 9px 20px;
+      background: #1d9bf0;
+      color: #fff;
+      font-size: 13px;
+      font-weight: 600;
+      border-radius: 8px;
+      transition: background 0.15s, transform 0.1s;
+    }
+
+    .btn-save:hover { background: #1a8cd8; }
+    .btn-save:active { transform: scale(0.97); }
+
+    .btn-reset {
+      all: unset;
+      cursor: pointer;
+      padding: 9px 16px;
+      font-size: 13px;
+      color: #536471;
+      border-radius: 8px;
+      transition: background 0.15s;
+    }
+
+    .btn-reset:hover { background: #f7f9f9; color: #0f1419; }
+
+    .toast {
+      display: none;
+      align-items: center;
+      gap: 6px;
+      font-size: 12.5px;
+      font-weight: 500;
+      color: #00ba7c;
+      margin-left: auto;
+      animation: fadeIn 0.2s ease;
+    }
+
+    .toast.show { display: flex; }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateX(6px); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="header">
+      <div class="logo">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+          <path d="M12 3v13M7 11l5 5 5-5" stroke="#1d9bf0" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M4 20h16" stroke="#1d9bf0" stroke-width="2.2" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <div>
+        <h1>cor downloader</h1>
+        <div class="subtitle">Settings</div>
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="apiUrl">API URL</label>
+      <input type="url" id="apiUrl" placeholder="https://cor-downloader.onrender.com" spellcheck="false" />
+      <span class="hint">The base URL of your cor downloader API server.</span>
+    </div>
+
+    <div class="actions">
+      <button class="btn-save" id="saveBtn">Save</button>
+      <button class="btn-reset" id="resetBtn">Reset to default</button>
+      <span class="toast" id="toast">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+          <path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        Saved!
+      </span>
+    </div>
+  </div>
+
+  <script src="options.js"></script>
+</body>
+</html>

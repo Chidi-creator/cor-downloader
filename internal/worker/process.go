@@ -38,12 +38,14 @@ func (p *Processor) ProcessJob(ctx context.Context, jobID string) error {
 	}
 
 	log.Printf("job %s: resolving %s", jobID, job.Url)
+	resolveStart := time.Now()
 	info, err := resolver.Resolve(ctx, job.Url, p.CookiesFromBrowser)
 	if err != nil {
 		p.markFailed(ctx, id, err)
 		return err
 	}
-	log.Printf("job %s: resolved — title=%q format=%s", jobID, info.Title, info.SelectedFormat.Ext)
+	log.Printf("job %s: resolved in %.1fs — title=%q ext=%s",
+		jobID, time.Since(resolveStart).Seconds(), info.Title, info.SelectedFormat.Ext)
 
 	jobDir := filepath.Join(p.DownloadDir, jobID)
 	if err := os.MkdirAll(jobDir, 0o755); err != nil {
@@ -73,6 +75,7 @@ func (p *Processor) ProcessJob(ctx context.Context, jobID string) error {
 	}
 
 	log.Printf("job %s: starting download", jobID)
+	downloadStart := time.Now()
 	localPath, err := downloader.Download(ctx, info, jobDir, onProgress)
 	if err != nil {
 		os.RemoveAll(jobDir)
@@ -80,7 +83,8 @@ func (p *Processor) ProcessJob(ctx context.Context, jobID string) error {
 		return err
 	}
 
-	log.Printf("job %s: download complete in %.1fs — ready to serve", jobID, time.Since(start).Seconds())
+	log.Printf("job %s: download complete in %.1fs (total %.1fs) — ready to serve",
+		jobID, time.Since(downloadStart).Seconds(), time.Since(start).Seconds())
 
 	if err := p.Queries.MarkDone(ctx, store.MarkDoneParams{
 		ID:        id,
